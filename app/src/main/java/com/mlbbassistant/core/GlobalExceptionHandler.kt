@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.core
 
 import android.content.Context
@@ -17,17 +18,28 @@ class GlobalExceptionHandler(
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
         try {
             Log.e(TAG, "Uncaught exception on thread ${thread.name}", throwable)
-            context.getSharedPreferences("crash_prefs", Context.MODE_PRIVATE)
+            context.getSharedPreferences(CRASH_PREFS, Context.MODE_PRIVATE)
                 .edit()
-                .putString("last_crash", throwable.message?.take(500) ?: "unknown")
-                .putLong("last_crash_ts", System.currentTimeMillis())
-                .apply()
+                .apply {
+                    putString(LAST_CRASH_KEY, throwable.message?.take(MAX_CRASH_MESSAGE_LENGTH) ?: UNKNOWN_CRASH_MESSAGE)
+                    putLong(LAST_CRASH_TIMESTAMP_KEY, System.currentTimeMillis())
+                    apply()
+                }
         } catch (inner: Exception) {
             Log.e(TAG, "Exception inside crash handler", inner)
         } finally {
-            defaultHandler?.uncaughtException(thread, throwable) ?: exitProcess(1)
+            defaultHandler?.uncaughtException(thread, throwable) ?: exitProcess(EXIT_CODE)
         }
     }
 
-    companion object { private const val TAG = "GlobalExceptionHandler" }
+    companion object {
+        private const val TAG = "GlobalExceptionHandler"
+        private const val CRASH_PREFS = "crash_prefs"
+        private const val LAST_CRASH_KEY = "last_crash"
+        private const val LAST_CRASH_TIMESTAMP_KEY = "last_crash_ts"
+        private const val MAX_CRASH_MESSAGE_LENGTH = 500
+        private const val UNKNOWN_CRASH_MESSAGE = "unknown"
+        private const val EXIT_CODE = 1
+    }
 }
+```

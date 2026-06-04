@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.di
 
 import android.content.Context
@@ -18,14 +19,18 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, "mlbb_assistant.db")
+    fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
+        return Room.databaseBuilder(context, AppDatabase::class.java, "mlbb_assistant.db")
             .fallbackToDestructiveMigration()
             .build()
+    }
 
     @Provides
+    @Singleton
     fun provideHeroDao(db: AppDatabase): HeroDao = db.heroDao()
 
     @Provides
+    @Singleton
     fun provideMetaSnapshotDao(db: AppDatabase): MetaSnapshotDao = db.metaSnapshotDao()
 }
+```

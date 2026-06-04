@@ -1,9 +1,11 @@
+```kotlin
 package com.mlbbassistant
 
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.util.Log
+import androidx.annotation.StringRes
 import com.mlbbassistant.core.GlobalExceptionHandler
 import com.mlbbassistant.data.repository.DatabaseInitializer
 import dagger.hilt.android.HiltAndroidApp
@@ -12,13 +14,14 @@ import javax.inject.Inject
 @HiltAndroidApp
 class MLBBApp : Application() {
 
-    @Inject lateinit var databaseInitializer: DatabaseInitializer
+    @Inject
+    lateinit var databaseInitializer: DatabaseInitializer
 
     override fun onCreate() {
         super.onCreate()
         installGlobalExceptionHandler()
         createNotificationChannels()
-        safeSeed()
+        seedDatabaseSafely()
     }
 
     private fun installGlobalExceptionHandler() {
@@ -31,21 +34,25 @@ class MLBBApp : Application() {
     private fun createNotificationChannels() {
         val channel = NotificationChannel(
             OVERLAY_CHANNEL_ID,
-            "MLBB Assistant Overlay",
+            getString(R.string.overlay_channel_name),
             NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Shown while the draft assistant overlay is active"
+            description = getString(R.string.overlay_channel_description)
             setShowBadge(false)
         }
-        try {
-            getSystemService(NotificationManager::class.java)
-                .createNotificationChannel(channel)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create notification channel", e)
+        val notificationManager = getSystemService(NotificationManager::class.java)
+        if (notificationManager != null) {
+            try {
+                notificationManager.createNotificationChannel(channel)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create notification channel", e)
+            }
+        } else {
+            Log.e(TAG, "NotificationManager is null, cannot create notification channel")
         }
     }
 
-    private fun safeSeed() {
+    private fun seedDatabaseSafely() {
         try {
             databaseInitializer.seedIfEmpty()
         } catch (e: Exception) {
@@ -58,3 +65,4 @@ class MLBBApp : Application() {
         private const val TAG = "MLBBApp"
     }
 }
+```

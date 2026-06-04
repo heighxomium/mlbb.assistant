@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.di
 
 import com.mlbbassistant.data.repository.HeroRepository
@@ -16,3 +17,4 @@ abstract class RepositoryModule {
     @Singleton
     abstract fun bindHeroRepository(impl: HeroRepositoryImpl): HeroRepository
 }
+```
