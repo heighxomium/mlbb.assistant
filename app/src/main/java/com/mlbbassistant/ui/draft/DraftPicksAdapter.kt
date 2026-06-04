@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.ui.draft
 
 import android.content.res.ColorStateList
@@ -15,7 +16,7 @@ import com.mlbbassistant.databinding.ItemPickChipBinding
  * Horizontal strip of picked heroes. Tapping the close icon calls [onRemove].
  */
 class DraftPicksAdapter(
-    private val onRemove: (Hero, isAlly: Boolean) -> Unit
+    private val onRemove: (Hero, Boolean) -> Unit
 ) : ListAdapter<Pair<Hero, Boolean>, DraftPicksAdapter.PickViewHolder>(DIFF_CALLBACK) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): PickViewHolder {
@@ -26,8 +27,9 @@ class DraftPicksAdapter(
     }
 
     override fun onBindViewHolder(holder: PickViewHolder, position: Int) {
-        val (hero, isAlly) = getItem(position)
-        holder.bind(hero, isAlly)
+        getItem(position)?.let { (hero, isAlly) ->
+            holder.bind(hero, isAlly)
+        }
     }
 
     inner class PickViewHolder(
@@ -36,11 +38,8 @@ class DraftPicksAdapter(
 
         fun bind(hero: Hero, isAlly: Boolean) {
             binding.chip.text = hero.name
-            val colorInt = ContextCompat.getColor(
-                binding.root.context,
-                if (isAlly) R.color.ally_pick_color else R.color.enemy_pick_color
-            )
-            // Chip.chipBackgroundColor expects a ColorStateList
+            val colorResId = if (isAlly) R.color.ally_pick_color else R.color.enemy_pick_color
+            val colorInt = ContextCompat.getColor(binding.root.context, colorResId)
             binding.chip.chipBackgroundColor = ColorStateList.valueOf(colorInt)
             binding.chip.setOnCloseIconClickListener { onRemove(hero, isAlly) }
         }
@@ -49,11 +48,13 @@ class DraftPicksAdapter(
     companion object {
         private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<Pair<Hero, Boolean>>() {
             override fun areItemsTheSame(
-                old: Pair<Hero, Boolean>, new: Pair<Hero, Boolean>
-            ) = old.first.id == new.first.id && old.second == new.second
+                oldItem: Pair<Hero, Boolean>, newItem: Pair<Hero, Boolean>
+            ): Boolean = oldItem.first.id == newItem.first.id && oldItem.second == newItem.second
+
             override fun areContentsTheSame(
-                old: Pair<Hero, Boolean>, new: Pair<Hero, Boolean>
-            ) = old == new
+                oldItem: Pair<Hero, Boolean>, newItem: Pair<Hero, Boolean>
+            ): Boolean = oldItem == newItem
         }
     }
 }
+```

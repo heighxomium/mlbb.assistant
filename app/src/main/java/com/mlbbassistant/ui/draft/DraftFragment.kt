@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.ui.draft
 
 import android.os.Bundle
@@ -25,8 +26,14 @@ class DraftFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: DraftViewModel by viewModels()
-    private lateinit var suggestionAdapter: SuggestionAdapter
-    private lateinit var picksAdapter: DraftPicksAdapter
+    private val suggestionAdapter by lazy {
+        SuggestionAdapter { suggestion -> showAddPickDialog(suggestion.hero) }
+    }
+    private val picksAdapter by lazy {
+        DraftPicksAdapter { hero, isAlly ->
+            if (isAlly) viewModel.removeAllyPick(hero) else viewModel.removeEnemyPick(hero)
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -43,17 +50,11 @@ class DraftFragment : Fragment() {
     }
 
     private fun setupAdapters() {
-        suggestionAdapter = SuggestionAdapter { suggestion ->
-            if (isAdded) showAddPickDialog(suggestion.hero)
-        }
         binding.rvSuggestions.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = suggestionAdapter
         }
 
-        picksAdapter = DraftPicksAdapter { hero, isAlly ->
-            if (isAlly) viewModel.removeAllyPick(hero) else viewModel.removeEnemyPick(hero)
-        }
         binding.rvPicks.apply {
             layoutManager = LinearLayoutManager(requireContext(), LinearLayoutManager.HORIZONTAL, false)
             adapter = picksAdapter
@@ -62,7 +63,6 @@ class DraftFragment : Fragment() {
 
     private fun setupButtons() {
         binding.btnReset.setOnClickListener {
-            if (!isAdded) return@setOnClickListener
             MaterialAlertDialogBuilder(requireContext())
                 .setTitle(R.string.draft_reset_title)
                 .setMessage(R.string.draft_reset_message)
@@ -75,17 +75,14 @@ class DraftFragment : Fragment() {
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-
                 launch {
                     viewModel.suggestions.collect { suggestions ->
-                        if (_binding == null) return@collect
                         suggestionAdapter.submitList(suggestions)
                     }
                 }
 
                 launch {
                     viewModel.draftState.collect { state ->
-                        if (_binding == null) return@collect
                         updatePicksDisplay(state)
                         binding.tvDraftStatus.text = buildDraftStatus(state)
                     }
@@ -100,11 +97,15 @@ class DraftFragment : Fragment() {
         picksAdapter.submitList(combined)
     }
 
-    private fun buildDraftStatus(state: DraftState) =
-        "Ally: ${state.allyPicks.size}/5  |  Enemy: ${state.enemyPicks.size}/5  |  Bans: ${state.bans.size}/10"
+    private fun buildDraftStatus(state: DraftState): String =
+        getString(
+            R.string.draft_status_format,
+            state.allyPicks.size,
+            state.enemyPicks.size,
+            state.bans.size
+        )
 
     private fun showAddPickDialog(hero: Hero) {
-        if (!isAdded || activity == null) return
         val options = arrayOf(
             getString(R.string.draft_add_ally),
             getString(R.string.draft_add_enemy),
@@ -125,7 +126,8 @@ class DraftFragment : Fragment() {
     override fun onDestroyView() {
         binding.rvSuggestions.adapter = null
         binding.rvPicks.adapter = null
-        super.onDestroyView()
         _binding = null
+        super.onDestroyView()
     }
 }
+```

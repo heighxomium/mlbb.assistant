@@ -1,4 +1,7 @@
+```kotlin
 package com.mlbbassistant.data.model
+
+import androidx.annotation.FloatRange
 
 /**
  * Domain model representing a single MLBB hero and its draft metadata.
@@ -21,12 +24,19 @@ data class Hero(
     val name: String,
     val role: HeroRole,
     val secondaryRole: HeroRole? = null,
-    val winRate: Float = 0.50f,
-    val pickRate: Float = 0f,
-    val banRate: Float = 0f,
+    @FloatRange(from = 0.0, to = 1.0) val winRate: Float = 0.50f,
+    @FloatRange(from = 0.0, to = 1.0) val pickRate: Float = 0f,
+    @FloatRange(from = 0.0, to = 1.0) val banRate: Float = 0f,
     val counters: List<Int> = emptyList(),
     val counteredBy: List<Int> = emptyList(),
     val synergies: List<Int> = emptyList(),
     val lane: HeroLane = HeroLane.JUNGLE,
     val imageUrl: String = ""
-)
+) {
+    init {
+        require(id > 0) { "Hero ID must be a positive integer." }
+        require(name.isNotBlank()) { "Hero name cannot be blank." }
+        require(imageUrl.isEmpty() || imageUrl.startsWith("http")) { "Image URL must be a valid URL or empty." }
+    }
+}
+```

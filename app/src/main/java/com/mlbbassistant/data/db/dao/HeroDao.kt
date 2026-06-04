@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.data.db.dao
 
 import androidx.room.*
@@ -26,9 +27,10 @@ interface HeroDao {
     @Query("SELECT * FROM heroes WHERE role = :role ORDER BY win_rate DESC")
     fun observeByRole(role: String): Flow<List<HeroEntity>>
 
-    @Upsert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(heroes: List<HeroEntity>)
 
     @Query("DELETE FROM heroes")
     suspend fun deleteAll()
 }
+```

@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.ui.settings
 
 import androidx.lifecycle.ViewModel
@@ -15,22 +16,65 @@ class SettingsViewModel @Inject constructor(
     private val prefs: UserPreferences
 ) : ViewModel() {
 
-    val overlayEnabled  = prefs.overlayEnabled.catch  { emit(false)  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
-    val overlayOpacity  = prefs.overlayOpacity.catch  { emit(0.85f)  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.85f)
-    val suggestionCount = prefs.suggestionCount.catch { emit(5)      }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 5)
-    val weightMeta      = prefs.weightMeta.catch      { emit(0.35f)  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.35f)
-    val weightCounter   = prefs.weightCounter.catch   { emit(0.40f)  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.40f)
-    val weightSynergy   = prefs.weightSynergy.catch   { emit(0.25f)  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.25f)
-    val apiUrl          = prefs.apiUrl.catch          { emit("")     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+    val overlayEnabled = prefs.overlayEnabled
+        .catch { emit(false) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    fun setOverlayEnabled(e: Boolean)  = viewModelScope.launch { prefs.setOverlayEnabled(e) }
-    fun setOverlayOpacity(v: Float)    = viewModelScope.launch { prefs.setOverlayOpacity(v) }
-    fun setSuggestionCount(n: Int)     = viewModelScope.launch { prefs.setSuggestionCount(n) }
-    fun setApiUrl(url: String)         = viewModelScope.launch { prefs.setApiUrl(url) }
+    val overlayOpacity = prefs.overlayOpacity
+        .catch { emit(0.85f) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.85f)
 
-    fun setWeights(meta: Float, counter: Float, synergy: Float) = viewModelScope.launch {
-        val total = meta + counter + synergy
-        if (total <= 0f) return@launch
-        prefs.setWeights(meta / total, counter / total, synergy / total)
+    val suggestionCount = prefs.suggestionCount
+        .catch { emit(5) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 5)
+
+    val weightMeta = prefs.weightMeta
+        .catch { emit(0.35f) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.35f)
+
+    val weightCounter = prefs.weightCounter
+        .catch { emit(0.40f) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.40f)
+
+    val weightSynergy = prefs.weightSynergy
+        .catch { emit(0.25f) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.25f)
+
+    val apiUrl = prefs.apiUrl
+        .catch { emit("") }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
+
+    fun setOverlayEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            prefs.setOverlayEnabled(enabled)
+        }
+    }
+
+    fun setOverlayOpacity(opacity: Float) {
+        viewModelScope.launch {
+            prefs.setOverlayOpacity(opacity)
+        }
+    }
+
+    fun setSuggestionCount(count: Int) {
+        viewModelScope.launch {
+            prefs.setSuggestionCount(count)
+        }
+    }
+
+    fun setApiUrl(url: String) {
+        viewModelScope.launch {
+            prefs.setApiUrl(url)
+        }
+    }
+
+    fun setWeights(meta: Float, counter: Float, synergy: Float) {
+        viewModelScope.launch {
+            val total = meta + counter + synergy
+            if (total > 0f) {
+                prefs.setWeights(meta / total, counter / total, synergy / total)
+            }
+        }
     }
 }
+```

@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.overlay
 
 import android.view.LayoutInflater
@@ -19,7 +20,9 @@ class OverlaySuggestionAdapter :
     }
 
     override fun onBindViewHolder(holder: OverlayViewHolder, position: Int) {
-        holder.bind(getItem(position), position + 1)
+        getItem(position)?.let { suggestion ->
+            holder.bind(suggestion, position + 1)
+        }
     }
 
     class OverlayViewHolder(
@@ -27,18 +30,22 @@ class OverlaySuggestionAdapter :
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(suggestion: DraftSuggestion, rank: Int) {
-            binding.tvOverlayRank.text = "$rank."
-            binding.tvOverlayName.text = suggestion.hero.name
-            binding.tvOverlayScore.text = "${"%.0f".format(suggestion.score * 100)}"
+            binding.apply {
+                tvOverlayRank.text = "$rank."
+                tvOverlayName.text = suggestion.hero.name
+                tvOverlayScore.text = "%.0f".format(suggestion.score * 100)
+            }
         }
     }
 
     companion object {
         private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<DraftSuggestion>() {
-            override fun areItemsTheSame(old: DraftSuggestion, new: DraftSuggestion) =
-                old.hero.id == new.hero.id
-            override fun areContentsTheSame(old: DraftSuggestion, new: DraftSuggestion) =
-                old == new
+            override fun areItemsTheSame(oldItem: DraftSuggestion, newItem: DraftSuggestion): Boolean =
+                oldItem.hero.id == newItem.hero.id
+
+            override fun areContentsTheSame(oldItem: DraftSuggestion, newItem: DraftSuggestion): Boolean =
+                oldItem == newItem
         }
     }
 }
+```

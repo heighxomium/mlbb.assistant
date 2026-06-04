@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.ui.heroes
 
 import android.os.Bundle
@@ -28,7 +29,7 @@ class HeroesFragment : Fragment() {
     private val binding get() = _binding!!
 
     private val viewModel: HeroesViewModel by viewModels()
-    private lateinit var adapter: HeroAdapter
+    private val adapter: HeroAdapter by lazy { HeroAdapter() }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -48,7 +49,6 @@ class HeroesFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        adapter = HeroAdapter()
         binding.rvHeroes.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = this@HeroesFragment.adapter
@@ -58,7 +58,7 @@ class HeroesFragment : Fragment() {
 
     private fun setupSearch() {
         binding.searchView.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
-            override fun onQueryTextSubmit(query: String?) = false
+            override fun onQueryTextSubmit(query: String?): Boolean = false
             override fun onQueryTextChange(newText: String?): Boolean {
                 viewModel.setSearchQuery(newText.orEmpty())
                 return true
@@ -67,15 +67,15 @@ class HeroesFragment : Fragment() {
     }
 
     private fun setupRoleChips() {
-        binding.chipAll.setOnCheckedChangeListener { _, checked ->
-            if (checked) viewModel.setRoleFilter(null)
+        binding.chipAll.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) viewModel.setRoleFilter(null)
         }
         HeroRole.entries.filter { it != HeroRole.UNKNOWN }.forEach { role ->
             val chip = Chip(requireContext()).apply {
                 text = role.displayName
                 isCheckable = true
-                setOnCheckedChangeListener { _, checked ->
-                    if (checked) viewModel.setRoleFilter(role)
+                setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) viewModel.setRoleFilter(role)
                 }
             }
             binding.chipGroupRoles.addView(chip)
@@ -89,10 +89,9 @@ class HeroesFragment : Fragment() {
     private fun observeState() {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-
                 launch {
                     viewModel.heroes.collect { heroes ->
-                        if (_binding == null) return@collect
+                        if (!isViewBindingAvailable()) return@collect
                         adapter.submitList(heroes)
                         binding.tvEmpty.isVisible = heroes.isEmpty()
                     }
@@ -100,7 +99,7 @@ class HeroesFragment : Fragment() {
 
                 launch {
                     viewModel.refreshState.collect { state ->
-                        if (_binding == null) return@collect
+                        if (!isViewBindingAvailable()) return@collect
                         binding.swipeRefresh.isRefreshing = state is Resource.Loading
                         when (state) {
                             is Resource.Error -> {
@@ -120,10 +119,12 @@ class HeroesFragment : Fragment() {
         }
     }
 
+    private fun isViewBindingAvailable(): Boolean = _binding != null
+
     override fun onDestroyView() {
-        // Clear adapter before nulling binding to avoid RecyclerView leak
-        binding.rvHeroes.adapter = null
-        super.onDestroyView()
+        binding.rvHeroes.adapter = null // Clear adapter to avoid memory leaks
         _binding = null
+        super.onDestroyView()
     }
 }
+```

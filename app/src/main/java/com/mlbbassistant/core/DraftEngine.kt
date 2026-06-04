@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.core
 
 import com.mlbbassistant.data.model.DraftState
@@ -13,13 +14,13 @@ import javax.inject.Singleton
  * Scoring formula (all weights configurable via [Weights]):
  *   score = wMeta * metaScore + wCounter * counterScore + wSynergy * synergyScore
  *
- * Each sub-score is normalised to [0, 1] before weighting.
+ * Each sub-score is normalized to [0, 1] before weighting.
  */
 @Singleton
 class DraftEngine @Inject constructor() {
 
     data class Weights(
-        val meta: Float    = 0.35f,
+        val meta: Float = 0.35f,
         val counter: Float = 0.40f,
         val synergy: Float = 0.25f
     )
@@ -38,22 +39,22 @@ class DraftEngine @Inject constructor() {
     ): List<DraftSuggestion> {
         if (pool.isEmpty()) return emptyList()
 
-        val enemyIds  = state.enemyPicks.map { it.id }.toSet()
-        val allyIds   = state.allyPicks.map { it.id }.toSet()
+        val enemyIds = state.enemyPicks.map { it.id }.toSet()
+        val allyIds = state.allyPicks.map { it.id }.toSet()
 
         return pool.map { hero ->
-            val meta    = metaScore(hero)
+            val meta = metaScore(hero)
             val counter = counterScore(hero, enemyIds)
             val synergy = synergyScore(hero, allyIds)
-            val score   = weights.meta * meta + weights.counter * counter + weights.synergy * synergy
+            val score = weights.meta * meta + weights.counter * counter + weights.synergy * synergy
 
             DraftSuggestion(
-                hero         = hero,
-                score        = score,
-                reason       = buildReason(hero, counter, synergy, meta),
+                hero = hero,
+                score = score,
+                reason = buildReason(counter, synergy, meta),
                 counterScore = counter,
                 synergyScore = synergy,
-                metaScore    = meta
+                metaScore = meta
             )
         }
             .sortedByDescending { it.score }
@@ -86,14 +87,14 @@ class DraftEngine @Inject constructor() {
     }
 
     private fun buildReason(
-        hero: Hero,
         counter: Float,
         synergy: Float,
         meta: Float
     ): String = buildString {
         if (counter >= 0.5f) append("Counters multiple enemy heroes. ")
         if (synergy >= 0.5f) append("Strong synergy with your team. ")
-        if (meta >= 0.55f)   append("High win rate this patch. ")
-        if (isEmpty())       append("Balanced pick for current draft.")
+        if (meta >= 0.55f) append("High win rate this patch. ")
+        if (isEmpty()) append("Balanced pick for current draft.")
     }.trimEnd()
 }
+```

@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.data.model
 
 enum class HeroRole(val displayName: String) {
@@ -10,7 +11,11 @@ enum class HeroRole(val displayName: String) {
     UNKNOWN("Unknown");
 
     companion object {
-        fun fromString(value: String): HeroRole =
-            entries.find { it.name.equals(value, ignoreCase = true) } ?: UNKNOWN
+        fun fromString(value: String?): HeroRole {
+            return value?.let { 
+                values().find { it.name.equals(it, ignoreCase = true) } 
+            } ?: UNKNOWN
+        }
     }
 }
+```

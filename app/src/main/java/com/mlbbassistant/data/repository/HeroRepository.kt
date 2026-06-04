@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.data.repository
 
 import com.mlbbassistant.core.Resource
@@ -29,3 +30,4 @@ interface HeroRepository {
     /** Returns the patch string stored in the last successful sync, or null. */
     suspend fun getLastSyncedPatch(): String?
 }
+```

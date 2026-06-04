@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.data.api
 
 import com.mlbbassistant.data.api.dto.MetaSnapshotDto
@@ -23,3 +24,4 @@ interface MlbbApiService {
         @Query("patch") patch: String? = null
     ): MetaSnapshotDto
 }
+```

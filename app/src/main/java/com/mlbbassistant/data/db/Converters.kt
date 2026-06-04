@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.data.db
 
 import android.util.Log
@@ -7,13 +8,13 @@ import com.google.gson.JsonSyntaxException
 import com.google.gson.reflect.TypeToken
 
 class Converters {
-    private val gson = Gson()
+    private val gson: Gson by lazy { Gson() }
     private val listType = object : TypeToken<List<Int>>() {}.type
 
     @TypeConverter
-    fun fromIntList(value: List<Int>?): String =
-        try { gson.toJson(value ?: emptyList<Int>()) }
-        catch (e: Exception) { "[]" }
+    fun fromIntList(value: List<Int>?): String {
+        return gson.toJson(value.orEmpty())
+    }
 
     @TypeConverter
     fun toIntList(value: String?): List<Int> {
@@ -21,10 +22,12 @@ class Converters {
         return try {
             gson.fromJson(value, listType) ?: emptyList()
         } catch (e: JsonSyntaxException) {
-            Log.w("Converters", "Bad int-list JSON: $value")
+            Log.w("Converters", "Invalid JSON for int list: $value", e)
             emptyList()
         } catch (e: Exception) {
+            Log.e("Converters", "Unexpected error while parsing JSON: $value", e)
             emptyList()
         }
     }
 }
+```

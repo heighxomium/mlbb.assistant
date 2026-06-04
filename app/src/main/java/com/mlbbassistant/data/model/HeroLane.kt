@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.data.model
 
 enum class HeroLane(val displayName: String) {
@@ -9,6 +10,7 @@ enum class HeroLane(val displayName: String) {
 
     companion object {
         fun fromString(value: String): HeroLane =
-            entries.find { it.name.equals(value, ignoreCase = true) } ?: JUNGLE
+            values().find { it.name.equals(value, ignoreCase = true) } ?: JUNGLE
     }
 }
+```

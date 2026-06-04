@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.ui.draft
 
 import android.view.LayoutInflater
@@ -20,7 +21,9 @@ class SuggestionAdapter(
     }
 
     override fun onBindViewHolder(holder: SuggestionViewHolder, position: Int) {
-        holder.bind(getItem(position), position + 1)
+        getItem(position)?.let { suggestion ->
+            holder.bind(suggestion, position + 1)
+        }
     }
 
     inner class SuggestionViewHolder(
@@ -28,22 +31,28 @@ class SuggestionAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(suggestion: DraftSuggestion, rank: Int) {
-            binding.tvRank.text         = "#$rank"
-            binding.tvSuggestionName.text = suggestion.hero.name
-            binding.tvSuggestionRole.text = suggestion.hero.role.displayName
-            binding.tvScore.text        = "${"%.0f".format(suggestion.score * 100)}pts"
-            binding.tvReason.text       = suggestion.reason
-            binding.progressScore.progress = (suggestion.score * 100).toInt()
-            binding.root.setOnClickListener { onSuggestionClick(suggestion) }
+            with(binding) {
+                tvRank.text = "#$rank"
+                tvSuggestionName.text = suggestion.hero.name
+                tvSuggestionRole.text = suggestion.hero.role.displayName
+                tvScore.text = "${"%.0f".format(suggestion.score * 100)}pts"
+                tvReason.text = suggestion.reason
+                progressScore.progress = (suggestion.score * 100).toInt()
+                root.setOnClickListener { onSuggestionClick(suggestion) }
+            }
         }
     }
 
     companion object {
         private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<DraftSuggestion>() {
-            override fun areItemsTheSame(old: DraftSuggestion, new: DraftSuggestion) =
-                old.hero.id == new.hero.id
-            override fun areContentsTheSame(old: DraftSuggestion, new: DraftSuggestion) =
-                old == new
+            override fun areItemsTheSame(oldItem: DraftSuggestion, newItem: DraftSuggestion): Boolean {
+                return oldItem.hero.id == newItem.hero.id
+            }
+
+            override fun areContentsTheSame(oldItem: DraftSuggestion, newItem: DraftSuggestion): Boolean {
+                return oldItem == newItem
+            }
         }
     }
 }
+```

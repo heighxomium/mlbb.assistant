@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.overlay
 
 import android.app.Notification
@@ -33,18 +34,28 @@ import kotlin.math.abs
 @AndroidEntryPoint
 class OverlayService : LifecycleService() {
 
-    @Inject lateinit var heroRepository: HeroRepository
-    @Inject lateinit var draftEngine: DraftEngine
-    @Inject lateinit var userPreferences: UserPreferences
+    @Inject
+    lateinit var heroRepository: HeroRepository
+
+    @Inject
+    lateinit var draftEngine: DraftEngine
+
+    @Inject
+    lateinit var userPreferences: UserPreferences
 
     private lateinit var windowManager: WindowManager
     private var overlayBinding: OverlayViewBinding? = null
     private val suggestionAdapter = OverlaySuggestionAdapter()
 
-    private var initialX = 0; private var initialY = 0
-    private var touchX = 0f;  private var touchY = 0f
+    private var initialX = 0
+    private var initialY = 0
+    private var touchX = 0f
+    private var touchY = 0f
 
-    companion object { private const val NOTIFICATION_ID = 1001; private const val TAG = "OverlayService" }
+    companion object {
+        private const val NOTIFICATION_ID = 1001
+        private const val TAG = "OverlayService"
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -53,7 +64,8 @@ class OverlayService : LifecycleService() {
             startForeground(NOTIFICATION_ID, buildNotification())
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed", e)
-            stopSelf(); return
+            stopSelf()
+            return
         }
         inflateOverlay()
         observeSuggestions()
@@ -65,8 +77,6 @@ class OverlayService : LifecycleService() {
         safeRemoveOverlay()
         super.onDestroy()
     }
-
-    // ── Overlay ──────────────────────────────────────────────────────────────
 
     private fun inflateOverlay() {
         try {
@@ -80,19 +90,29 @@ class OverlayService : LifecycleService() {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT
-            ).apply { gravity = Gravity.TOP or Gravity.START; x = 0; y = 200 }
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = 0
+                y = 200
+            }
 
             setupDrag(binding, params)
             binding.btnCloseOverlay.setOnClickListener { stopSelf() }
             windowManager.addView(binding.root, params)
 
             lifecycleScope.launch {
-                runCatching { binding.root.alpha = userPreferences.overlayOpacity.first() }
+                runCatching {
+                    binding.root.alpha = userPreferences.overlayOpacity.first()
+                }.onFailure { e ->
+                    Log.e(TAG, "Failed to set overlay opacity", e)
+                }
             }
         } catch (e: SecurityException) {
-            Log.e(TAG, "SYSTEM_ALERT_WINDOW permission missing", e); stopSelf()
+            Log.e(TAG, "SYSTEM_ALERT_WINDOW permission missing", e)
+            stopSelf()
         } catch (e: Exception) {
-            Log.e(TAG, "inflateOverlay failed", e); stopSelf()
+            Log.e(TAG, "inflateOverlay failed", e)
+            stopSelf()
         }
     }
 
@@ -100,8 +120,11 @@ class OverlayService : LifecycleService() {
         binding.overlayHandle.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    initialX = params.x; initialY = params.y
-                    touchX = event.rawX;  touchY = event.rawY; true
+                    initialX = params.x
+                    initialY = params.y
+                    touchX = event.rawX
+                    touchY = event.rawY
+                    true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     params.x = initialX + (event.rawX - touchX).toInt()
@@ -123,17 +146,16 @@ class OverlayService : LifecycleService() {
     }
 
     private fun safeRemoveOverlay() {
-        val view = overlayBinding?.root ?: return
-        try {
-            if (view.windowToken != null) windowManager.removeView(view)
-        } catch (e: Exception) {
-            Log.w(TAG, "removeView failed (already removed?)", e)
-        } finally {
-            overlayBinding = null
+        overlayBinding?.root?.let { view ->
+            try {
+                if (view.windowToken != null) windowManager.removeView(view)
+            } catch (e: Exception) {
+                Log.w(TAG, "removeView failed (already removed?)", e)
+            } finally {
+                overlayBinding = null
+            }
         }
     }
-
-    // ── Suggestions ──────────────────────────────────────────────────────────
 
     private fun observeSuggestions() {
         lifecycleScope.launch {
@@ -149,14 +171,16 @@ class OverlayService : LifecycleService() {
                 runCatching { draftEngine.suggest(heroes, DraftState(), topN, weights) }
                     .getOrDefault(emptyList())
             }
-                .catch { emit(emptyList()) }
+                .catch { e ->
+                    Log.e(TAG, "Error observing suggestions", e)
+                    emit(emptyList())
+                }
                 .collect { suggestions ->
                     runCatching { suggestionAdapter.submitList(suggestions) }
+                        .onFailure { e -> Log.e(TAG, "Error submitting suggestions", e) }
                 }
         }
     }
-
-    // ── Notification ─────────────────────────────────────────────────────────
 
     private fun buildNotification(): Notification {
         val tap = PendingIntent.getActivity(
@@ -173,3 +197,4 @@ class OverlayService : LifecycleService() {
             .build()
     }
 }
+```

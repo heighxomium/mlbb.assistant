@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.ui.draft
 
 import androidx.lifecycle.ViewModel
@@ -25,10 +26,13 @@ class DraftViewModel @Inject constructor(
 
     private val allHeroes: StateFlow<List<Hero>> = repo.observeHeroes()
         .catch { emit(emptyList()) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private data class ScoringConfig(
-        val topN: Int, val meta: Float, val counter: Float, val synergy: Float
+        val topN: Int,
+        val meta: Float,
+        val counter: Float,
+        val synergy: Float
     )
 
     private val scoringConfig: Flow<ScoringConfig> = combine(
@@ -45,27 +49,23 @@ class DraftViewModel @Inject constructor(
         allHeroes,
         scoringConfig
     ) { state, heroes, cfg ->
-        runCatching {
-            val pool = heroes.filter { it.id !in state.unavailableIds }
-            engine.suggest(pool, state, cfg.topN,
-                DraftEngine.Weights(cfg.meta, cfg.counter, cfg.synergy))
-        }.getOrDefault(emptyList())
-    }
-        .catch { emit(emptyList()) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        val pool = heroes.filter { it.id !in state.unavailableIds }
+        engine.suggest(pool, state, cfg.topN, DraftEngine.Weights(cfg.meta, cfg.counter, cfg.synergy))
+    }.catch { emit(emptyList()) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addAllyPick(hero: Hero)    = mutateDraft { copy(allyPicks  = (allyPicks  + hero).take(5)) }
-    fun addEnemyPick(hero: Hero)   = mutateDraft { copy(enemyPicks = (enemyPicks + hero).take(5)) }
-    fun addBan(hero: Hero)         = mutateDraft { copy(bans       = (bans       + hero).take(10)) }
-    fun removeAllyPick(hero: Hero) = mutateDraft { copy(allyPicks  = allyPicks  - hero) }
-    fun removeEnemyPick(hero: Hero)= mutateDraft { copy(enemyPicks = enemyPicks - hero) }
-    fun removeBan(hero: Hero)      = mutateDraft { copy(bans       = bans       - hero) }
-    fun resetDraft()               { _draftState.value = DraftState() }
+    fun addAllyPick(hero: Hero) = updateDraftState { copy(allyPicks = (allyPicks + hero).take(5)) }
+    fun addEnemyPick(hero: Hero) = updateDraftState { copy(enemyPicks = (enemyPicks + hero).take(5)) }
+    fun addBan(hero: Hero) = updateDraftState { copy(bans = (bans + hero).take(10)) }
+    fun removeAllyPick(hero: Hero) = updateDraftState { copy(allyPicks = allyPicks - hero) }
+    fun removeEnemyPick(hero: Hero) = updateDraftState { copy(enemyPicks = enemyPicks - hero) }
+    fun removeBan(hero: Hero) = updateDraftState { copy(bans = bans - hero) }
+    fun resetDraft() = updateDraftState { DraftState() }
 
-    private fun mutateDraft(transform: DraftState.() -> DraftState) {
-        viewModelScope.launch {
-            _draftState.value = runCatching { _draftState.value.transform() }
-                .getOrDefault(_draftState.value)
+    private fun updateDraftState(transform: DraftState.() -> DraftState) {
+        _draftState.update { currentState ->
+            runCatching { currentState.transform() }.getOrDefault(currentState)
         }
     }
 }
+```

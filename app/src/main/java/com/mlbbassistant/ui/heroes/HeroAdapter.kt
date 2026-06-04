@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.ui.heroes
 
 import android.view.LayoutInflater
@@ -9,7 +10,7 @@ import com.mlbbassistant.data.model.Hero
 import com.mlbbassistant.databinding.ItemHeroBinding
 
 class HeroAdapter(
-    private val onHeroClick: ((Hero) -> Unit)? = null
+    private val onHeroClick: (Hero) -> Unit = {}
 ) : ListAdapter<Hero, HeroAdapter.HeroViewHolder>(DIFF_CALLBACK) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): HeroViewHolder {
@@ -20,7 +21,7 @@ class HeroAdapter(
     }
 
     override fun onBindViewHolder(holder: HeroViewHolder, position: Int) {
-        holder.bind(getItem(position))
+        getItem(position)?.let { holder.bind(it) }
     }
 
     inner class HeroViewHolder(
@@ -28,22 +29,28 @@ class HeroAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         fun bind(hero: Hero) {
-            binding.tvHeroName.text = hero.name
-            binding.tvHeroRole.text = buildString {
-                append(hero.role.displayName)
-                hero.secondaryRole?.let { append(" / ${it.displayName}") }
+            with(binding) {
+                tvHeroName.text = hero.name
+                tvHeroRole.text = buildString {
+                    append(hero.role.displayName)
+                    hero.secondaryRole?.let { append(" / ${it.displayName}") }
+                }
+                tvWinRate.text = "Win: %.1f%%".format(hero.winRate * 100)
+                tvBanRate.text = "Ban: %.1f%%".format(hero.banRate * 100)
+                tvLane.text = hero.lane.displayName
+                root.setOnClickListener { onHeroClick(hero) }
             }
-            binding.tvWinRate.text  = "Win: ${"%.1f".format(hero.winRate * 100)}%"
-            binding.tvBanRate.text  = "Ban: ${"%.1f".format(hero.banRate * 100)}%"
-            binding.tvLane.text     = hero.lane.displayName
-            binding.root.setOnClickListener { onHeroClick?.invoke(hero) }
         }
     }
 
     companion object {
         private val DIFF_CALLBACK = object : DiffUtil.ItemCallback<Hero>() {
-            override fun areItemsTheSame(old: Hero, new: Hero)    = old.id == new.id
-            override fun areContentsTheSame(old: Hero, new: Hero) = old == new
+            override fun areItemsTheSame(oldItem: Hero, newItem: Hero): Boolean =
+                oldItem.id == newItem.id
+
+            override fun areContentsTheSame(oldItem: Hero, newItem: Hero): Boolean =
+                oldItem == newItem
         }
     }
 }
+```

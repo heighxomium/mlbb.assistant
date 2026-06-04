@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.di
 
 import com.mlbbassistant.data.repository.HeroRepository
@@ -10,9 +11,10 @@ import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
-abstract class RepositoryModule {
+interface RepositoryModule {
 
     @Binds
     @Singleton
-    abstract fun bindHeroRepository(impl: HeroRepositoryImpl): HeroRepository
+    fun bindHeroRepository(impl: HeroRepositoryImpl): HeroRepository
 }
+```

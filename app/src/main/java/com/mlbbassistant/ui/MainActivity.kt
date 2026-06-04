@@ -1,7 +1,7 @@
+```kotlin
 package com.mlbbassistant.ui
 
 import android.os.Bundle
-import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.navigation.NavController
 import androidx.navigation.fragment.NavHostFragment
@@ -14,9 +14,11 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var navController: NavController? = null
+    private lateinit var navController: NavController
 
-    companion object { private const val TAG = "MainActivity" }
+    companion object {
+        private const val TAG = "MainActivity"
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,18 +28,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupNavigation() {
-        try {
-            val navHostFragment = supportFragmentManager
-                .findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
-                ?: run { Log.e(TAG, "NavHostFragment not found"); return }
+        val navHostFragment = supportFragmentManager
+            .findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
 
-            navController = navHostFragment.navController
-            binding.bottomNavigation.setupWithNavController(navHostFragment.navController)
-        } catch (e: Exception) {
-            Log.e(TAG, "Navigation setup failed", e)
+        if (navHostFragment == null) {
+            Log.e(TAG, "NavHostFragment not found")
+            return
         }
+
+        navController = navHostFragment.navController
+        binding.bottomNavigation.setupWithNavController(navController)
     }
 
     override fun onSupportNavigateUp(): Boolean =
-        navController?.navigateUp() ?: super.onSupportNavigateUp()
+        navController.navigateUp() || super.onSupportNavigateUp()
 }
+```

@@ -1,3 +1,4 @@
+```kotlin
 package com.mlbbassistant.di
 
 import com.google.gson.Gson
@@ -18,10 +19,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    @Provides @Singleton
+    @Provides
+    @Singleton
     fun provideGson(): Gson = GsonBuilder().serializeNulls().create()
 
-    @Provides @Singleton
+    @Provides
+    @Singleton
     fun provideOkHttpClient(): OkHttpClient =
         OkHttpClient.Builder()
             .addInterceptor(HttpLoggingInterceptor().apply {
@@ -33,19 +36,14 @@ object NetworkModule {
             .retryOnConnectionFailure(true)
             .build()
 
-    /** Builds an [MlbbApiService] for the given URL. Returns null for blank/invalid URLs. */
-    fun buildApiService(baseUrl: String, client: OkHttpClient, gson: Gson): MlbbApiService? {
-        if (baseUrl.isBlank()) return null
-        val normalized = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
-        return try {
-            Retrofit.Builder()
-                .baseUrl(normalized)
-                .client(client)
-                .addConverterFactory(GsonConverterFactory.create(gson))
-                .build()
-                .create(MlbbApiService::class.java)
-        } catch (e: Exception) {
-            null
-        }
-    }
+    @Provides
+    @Singleton
+    fun provideMlbbApiService(client: OkHttpClient, gson: Gson): MlbbApiService =
+        Retrofit.Builder()
+            .baseUrl("https://your-default-base-url.com/") // Replace with your default base URL
+            .client(client)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(MlbbApiService::class.java)
 }
+```
