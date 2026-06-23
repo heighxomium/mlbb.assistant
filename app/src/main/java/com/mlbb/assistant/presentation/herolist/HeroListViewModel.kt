@@ -11,6 +11,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.update
@@ -63,6 +64,7 @@ class HeroListViewModel @Inject constructor(
      * [HeroListState.filteredHeroes] on [Dispatchers.Default] to avoid blocking
      * the Main thread when the hero list is large.
      */
+    @OptIn(FlowPreview::class)
     private fun collectFilters() {
         viewModelScope.launch {
             combine(

@@ -33,6 +33,7 @@ import com.mlbb.assistant.data.local.crashlog.LogEntry
 import com.mlbb.assistant.data.local.crashlog.LogLevel
 import com.mlbb.assistant.presentation.common.theme.*
 
+@Suppress("DEPRECATION")
 @Composable
 fun LogScreen(
     onBack: () -> Unit,

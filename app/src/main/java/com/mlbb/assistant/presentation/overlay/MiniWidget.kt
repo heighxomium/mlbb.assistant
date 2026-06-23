@@ -402,7 +402,7 @@ private fun SlotDot(hero: Hero?, filledColor: Color) {
             ),
         contentAlignment = Alignment.Center
     ) {
-        if (isFilled && hero != null) {
+        if (hero != null && hero.id != -1) {
             Text(hero.name.take(1), color = filledColor, fontSize = 5.5.sp, fontWeight = FontWeight.Bold)
         }
     }

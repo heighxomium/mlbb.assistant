@@ -26,7 +26,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Leaderboard
 import androidx.compose.material.icons.rounded.LocalFireDepartment
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material.icons.automirrored.rounded.ShowChart
 import androidx.compose.material.icons.rounded.SportsMartialArts
 import androidx.compose.material.icons.rounded.SportsKabaddi
 import androidx.compose.material3.CardDefaults
@@ -165,7 +165,7 @@ private fun InsightsCard(insights: InsightsState) {
     ) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Rounded.ShowChart, contentDescription = null, tint = MLBBGold, modifier = Modifier.size(16.dp))
+                Icon(Icons.AutoMirrored.Rounded.ShowChart, contentDescription = null, tint = MLBBGold, modifier = Modifier.size(16.dp))
                 Text(
                     stringResource(R.string.insights_title),
                     color = MLBBGold, fontWeight = FontWeight.Bold, fontSize = 12.sp
