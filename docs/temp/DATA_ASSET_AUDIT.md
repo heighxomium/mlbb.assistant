@@ -1,69 +1,45 @@
-# DATA ASSET AUDIT
-_Generated: 2026-06-21 | Phase 1 Step 4_
+# Data Asset Audit
 
-## Discovered Data Files
+Generated: 2026-06-23
 
-| File | Location | Size | Lines | Minified? | Referenced? |
-|---|---|---|---|---|---|
-| `default_heroes.json` | `res/raw/` | 116 KB | 6,377 | ❌ No | ✅ Yes (`R.raw.default_heroes` in `JsonParser.kt`) |
-| `draft_ui_map.json` | `assets/` | 9.9 KB | ~200 | ❌ No | ✅ Yes (referenced by package name in `FrameProcessor` / capture layer) |
+## JSON Files
 
----
+### `app/src/main/assets/draft_ui_map.json`
+- **Size**: 7,287 bytes
+- **Purpose**: Normalised screen region coordinates for draft UI slot detection
+- **Structure**: Object with phase_banner, action_button, ban_slots, pick_slots
+- **Minification status**: Already compact (7,287 bytes actual vs 7,362 bytes with json.dumps compact separators)
+- **Used by**: `SlotRegions.kt` (parsed at runtime)
+- **Action**: No optimization needed
 
-## Finding 1: `default_heroes.json` — Pretty-Printed (HIGH IMPACT)
+### `app/src/main/res/raw/default_heroes.json`
+- **Size**: 74,623 bytes (73 KB)
+- **Purpose**: Seed data for 132 MLBB heroes with stats, roles, counters, synergies
+- **Minification status**: Already fully minified (74,623 bytes matches compact output)
+- **Used by**: `JsonParser.kt` → loaded into Room database on first launch
+- **Action**: No optimization needed
 
-**Current state:** 116 KB, 6,377 lines, fully human-formatted with indentation, newlines.
+### `app/schemas/com.mlbb.assistant.data.local.database.AppDatabase/3.json`
+- **Size**: ~15 KB
+- **Purpose**: Room schema export for version 3 (auto-generated)
+- **Action**: Do not modify (generated file)
 
-**Sample structure:**
-```json
-{
-  "id": 1,
-  "name": "Miya",
-  "role": "Marksman",
-  "secondaryRole": null,
-  "lane": "GOLD",
-  "tier": "A",
-  ...
-}
-```
+## CSV Files
+**None found.**
 
-**Redundancy check:**
-- `isOP` field overlaps with `tier: S+` semantics → candidate for removal (see `DUPLICATE_FEATURES_REPORT.md` M-03)
-- `isToxicMechanic` overlaps with `banRate` signal → candidate for removal
+## XML Data Files
+No data XML files. All XML files are Android resource/config files.
 
-**Recommendation:**
-1. Minify the file (remove all whitespace/newlines) → estimated savings: **~35-40 KB** (30-35% reduction).
-2. After `[MANUAL_REVIEW_NEEDED]` confirmation on M-03, remove `isOP` and `isToxicMechanic` keys from all hero objects.
-3. **Do NOT convert to ProtoBuf** — the file is parsed with Gson via `JsonParser`. The parse speed is acceptable for a one-time seed load.
+## Proto Files
+**None found.**
 
-**Action:** `[MINIFY]`
+## Summary
 
----
+| Asset | Size | Already Minified? | Action |
+|-------|------|-------------------|--------|
+| `draft_ui_map.json` | 7 KB | Yes | None |
+| `default_heroes.json` | 73 KB | Yes | None |
+| Room schema JSON | ~15 KB | N/A (generated) | Do not modify |
 
-## Finding 2: `draft_ui_map.json` — Has Comment Keys (MEDIUM)
-
-**Current state:** 9.9 KB, pretty-printed, contains non-standard `_comment` and `_calibrated_from` keys used as human-readable documentation.
-
-**Issue:** Comment keys (`_comment`, `_calibrated_from`) are parsed but likely ignored at runtime. They add ~200 bytes of waste per load.
-
-**Recommendation:**
-1. Move `_comment` and `_calibrated_from` values to a separate `docs/` file.
-2. Minify the JSON file after removing comment keys.
-
-**Action:** `[MINIFY + STRIP_COMMENT_KEYS]`
-
----
-
-## Format Suitability Assessment
-
-| Scenario | Verdict |
-|---|---|
-| Convert `default_heroes.json` to ProtoBuf | ❌ Not recommended — single load at install, Gson already in dependency tree, proto toolchain adds complexity |
-| Convert `draft_ui_map.json` to ProtoBuf | ❌ Not recommended — small file, structure changes frequently |
-| Minify both JSON files | ✅ Recommended — easy win, zero logic changes |
-
----
-
-## Unused Data Files
-None found. Both files have confirmed Kotlin references.
-
+**Total data asset size**: ~95 KB
+**Optimization savings**: 0 bytes (all assets already optimized)

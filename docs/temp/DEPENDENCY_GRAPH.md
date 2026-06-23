@@ -1,57 +1,112 @@
-# DEPENDENCY GRAPH — Fan-In / Fan-Out Analysis
-_Generated: 2026-06-21 | Phase 1 Step 7_
+# Dependency Graph
 
-## Critical Core Files (Fan-In > 5) — Refactor LAST
+Generated: 2026-06-23
 
-| File | Fan-In | Notes |
-|---|---|---|
-| `domain/model/Hero.kt` | ~20 | Used by nearly every layer — scoring, advisors, UI, DB mappers |
-| `domain/engine/DraftSessionManager.kt` | ~10 | `DraftSession` and `DraftAction` types consumed by overlay, draft screen, advisors |
-| `domain/scoring/DraftScorer.kt` | ~8 | `HeroScore` consumed by overlay, draft screen, suggestion card |
-| `domain/advisor/CompositionAnalyzer.kt` | ~6 | Used by MiniWidget, BanPhaseContent, DraftScorer |
-| `presentation/common/theme/Color.kt` | ~25 | All overlay and screen composables import brand colors |
-| `presentation/common/components/HeroPortrait.kt` | ~8 | Used by MiniWidget, HeroGrid, SuggestionCard, BanPhaseContent |
-
-## Leaf Nodes (Fan-Out=0, Fan-In ≤ 1) — Refactor FIRST
-
-| File | Fan-In | Notes |
-|---|---|---|
-| `utils/DateFormatter.kt` | ~3 | Pure utility — safe to refactor early |
-| `utils/Extensions.kt` | ~5 | Pure utility — safe to refactor early |
-| `utils/NetworkResult.kt` | ~4 | Simple sealed class — safe |
-| `utils/JsonParser.kt` | 1 | Only called by `HeroRepositoryImpl` |
-| `domain/model/DraftOutcome.kt` | ~3 | Simple enum |
-| `domain/model/Proficiency.kt` | ~3 | Simple enum |
-| `data/export/DraftExporter.kt` | 1 | Only called by export use case |
-| `service/VoiceAlertService.kt` | 0 | **No callers found — dead code candidate** |
-
-## Feature → File Dependency Map
-
-| Feature | Primary Files |
-|---|---|
-| Hero draft overlay | `OverlayService`, `MiniWidget`, `DraftPanel`, `BanPhaseContent`, `PickPhaseContent`, `TradingPhaseContent`, `FinalReportContent`, `FloatingBubble` |
-| Draft scoring & suggestions | `DraftScorer`, `DraftScoreCalculator`, `DraftSessionManager`, `GetSuggestionsUseCase`, `ScoreWeights` |
-| Hero database | `HeroEntity`, `HeroDao`, `HeroRepositoryImpl`, `JsonParser`, `default_heroes.json`, `SyncHeroesUseCase` |
-| Screen capture / OCR | `FrameProcessor`, `PhaseDetector`, `PhaseOcrDetector`, `PortraitMatcher`, `PerceptualHash`, `RankDetector`, `SlotRegions`, `draft_ui_map.json` |
-| Settings & calibration | `SettingsScreen`, `SettingsViewModel`, `SettingsState`, `WeightCalibrator`, `PreferencesDataStore` |
-| Draft history & replay | `DraftHistoryScreen`, `DraftReplayScreen`, `DraftHistoryViewModel`, `DraftSessionEntity`, `DraftSessionDao`, `DraftSessionRepositoryImpl` |
-| Navigation | `AppNavGraph`, `AppRoute`, `AppShell` |
-
-## Layer Dependency Order (Bottom-Up)
+## Architecture Layers
 
 ```
-utils/              ← No dependencies (leaf)
-domain/model/       ← Depends on: nothing (pure Kotlin)
-domain/repository/  ← Depends on: domain/model
-domain/usecase/     ← Depends on: domain/model, domain/repository
-domain/scoring/     ← Depends on: domain/model
-domain/advisor/     ← Depends on: domain/model, domain/scoring
-domain/engine/      ← Depends on: domain/model, domain/advisor
-data/remote/        ← Depends on: domain/model
-data/local/         ← Depends on: domain/model
-data/repository/    ← Depends on: domain/repository, data/local, data/remote
-di/                 ← Depends on: all above
-service/            ← Depends on: domain, data
-presentation/       ← Depends on: domain, di, service
+┌─────────────────────────────────────────────────────────┐
+│  Presentation Layer                                      │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐ │
+│  │ Screens  │ │ViewModels│ │Components│ │  Overlay   │ │
+│  │(Compose) │ │ (Hilt)   │ │ (shared) │ │  Service   │ │
+│  └────┬─────┘ └────┬─────┘ └──────────┘ └──────┬─────┘ │
+│       │            │                            │       │
+├───────┼────────────┼────────────────────────────┼───────┤
+│  Domain Layer      │                            │       │
+│  ┌─────────┐ ┌─────┴─────┐ ┌──────────┐ ┌─────┴─────┐ │
+│  │  Models │ │ Use Cases │ │ Scoring  │ │  Engine   │ │
+│  │  (pure) │ │  (inject) │ │  (pure)  │ │  (pure)   │ │
+│  └─────────┘ └─────┬─────┘ └──────────┘ └───────────┘ │
+│                    │ (interfaces)                        │
+├────────────────────┼────────────────────────────────────┤
+│  Data Layer        │                                    │
+│  ┌─────────┐ ┌─────┴─────┐ ┌──────────┐ ┌───────────┐ │
+│  │  Room   │ │  Repos    │ │   API    │ │DataStore  │ │
+│  │(DB/DAO) │ │  (impl)   │ │(Retrofit)│ │(prefs)    │ │
+│  └─────────┘ └───────────┘ └──────────┘ └───────────┘ │
+│                                                         │
+├─────────────────────────────────────────────────────────┤
+│  DI Layer (Hilt Modules)                                │
+│  AppModule │ DatabaseModule │ NetworkModule │ OverlayModule │ RepositoryModule │
+└─────────────────────────────────────────────────────────┘
 ```
 
+## Key Dependency Flows
+
+### ViewModel → UseCase → Repository
+
+```
+HomeViewModel
+  ├── GetHeroesUseCase → HeroRepository(interface) → HeroRepositoryImpl → HeroDao
+  └── GetDraftHistoryUseCase → DraftSessionRepository(interface) → DraftSessionRepositoryImpl → DraftSessionDao
+
+DraftViewModel
+  ├── GetSuggestionsUseCase → DraftScorer (pure computation)
+  ├── SaveDraftSessionUseCase → DraftSessionRepository
+  ├── DraftSessionManager (StateFlow<DraftSession>)
+  └── GetHeroesUseCase → HeroRepository
+
+HeroListViewModel
+  ├── GetHeroesUseCase → HeroRepository
+  └── SyncHeroesUseCase → HeroRepository → MetaApi
+
+SettingsViewModel
+  ├── ToggleOverlayUseCase → OverlayController
+  └── PreferencesDataStore → DataStore<Preferences>
+```
+
+### Overlay Service Dependencies
+
+```
+OverlayService (1,051 lines)
+  ├── @Inject DraftSessionManager
+  ├── @Inject GetHeroesUseCase
+  ├── @Inject DataStore<Preferences>
+  ├── PhaseDetector (capture)
+  ├── PortraitMatcher (capture)
+  ├── SlotRegions (capture)
+  ├── ScreenCaptureManager (service)
+  └── MiniWidget / FloatingBubble (overlay composables)
+```
+
+### Capture Pipeline
+
+```
+ScreenCaptureManager
+  └── MediaProjection → VirtualDisplay → ImageReader → Bitmap
+        ↓
+  PhaseDetector.detect(frame) → DetectedPhase
+  SlotRegions.cropSlot(frame, region) → Bitmap
+  PortraitMatcher.match(crop, heroes) → MatchResult
+  FirstPickDetector.detect(frame) → Boolean
+```
+
+## Fan-In / Fan-Out Analysis
+
+### High Fan-In (most depended-upon)
+| Module | Fan-In | Dependents |
+|--------|--------|------------|
+| `Hero` (domain model) | 25+ | Almost every layer |
+| `DraftSessionManager` | 8 | ViewModels, OverlayService, tests |
+| `HeroRepository` | 6 | 4 use cases, 2 repos |
+| `DraftScorer` | 5 | GetSuggestionsUseCase, DraftViewModel, tests |
+| `PhaseDetectionConfig` | 3 | PhaseDetector, PortraitMatcher, OverlayService |
+
+### High Fan-Out (most dependencies)
+| Module | Fan-Out | Dependencies |
+|--------|---------|-------------|
+| `OverlayService.kt` | 12+ | DraftSessionManager, GetHeroesUseCase, DataStore, PhaseDetector, PortraitMatcher, SlotRegions, ScreenCaptureManager, ... |
+| `DraftExporter.kt` | 8 | Canvas, MediaStore, DraftSessionEntity, DraftOutcome, DateFormatter, ... |
+| `DatabaseModule.kt` | 6 | AppDatabase, HeroDao, DraftSessionDao, HeroPoolDao, Migrations |
+| `NetworkModule.kt` | 5 | OkHttp, Retrofit, Gson, MetaApi, Interceptors |
+
+## Hilt Module Bindings
+
+```kotlin
+// AppModule: DataStore, DraftSessionManager, VoiceAlertService
+// DatabaseModule: AppDatabase, HeroDao, DraftSessionDao, HeroPoolDao, MIGRATION_1_2, MIGRATION_2_3
+// NetworkModule: OkHttpClient, Retrofit, MetaApi, Gson
+// OverlayModule: OverlayController (singleton)
+// RepositoryModule: @Binds HeroRepository, @Binds DraftSessionRepository
+```

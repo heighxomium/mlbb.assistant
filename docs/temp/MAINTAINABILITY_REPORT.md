@@ -1,80 +1,68 @@
-# MAINTAINABILITY REPORT
-_Generated: 2026-06-21 | Phase 1 Step 5_
+# Maintainability Report
 
-## Large Files (> 300 lines)
+Generated: 2026-06-23
 
-| File | Lines | Issue |
-|---|---|---|
-| `presentation/overlay/MiniWidget.kt` | 1,202 | Single Composable function file — needs sub-component extraction |
-| `presentation/settings/SettingsScreen.kt` | 1,060 | Monolithic settings screen — needs section extraction |
-| `presentation/overlay/OverlayService.kt` | 991 | Service + coroutine logic mixed — needs helper class extraction |
-| `presentation/welcome/PermissionWizardScreen.kt` | 418 | Acceptable; wizard steps could be extracted to `components/` |
-| `presentation/history/DraftReplayScreen.kt` | 335 | Acceptable |
-| `presentation/herodetail/HeroDetailScreen.kt` | 312 | Acceptable |
-| `presentation/home/HomeScreen.kt` | 302 | Acceptable |
-| `presentation/log/LogScreen.kt` | 300 | Acceptable |
-| `domain/scoring/DraftScorer.kt` | 283 | Acceptable for a pure-Kotlin scorer |
+## Large Files (>500 lines)
 
-## Null Safety
+| File | Lines | Severity | Notes |
+|------|-------|----------|-------|
+| `OverlayService.kt` | 1,051 | CRITICAL | Two-mode touch strategy (bubble vs mini-widget), autonomous capture loop, session snapshot persistence, permission watchdog. Candidate for extraction of CaptureLoop, SessionPersistence, TouchStrategy helper classes in a future pass. |
+| `MiniWidget.kt` | 672 | HIGH | Complex overlay Compose UI with slot grids, ban recommendations, score panels. Well-organized with internal composable functions but large overall. |
 
-| File | `!!` count | `lateinit` count | Assessment |
-|---|---|---|---|
-| `presentation/main/MainActivity.kt` | 1 | 1 | Low risk — Activity lifecycle |
-| `capture/ScreenCaptureManager.kt` | 1 | 0 | Low risk |
-| `presentation/history/DraftReplayScreen.kt` | 1 | 0 | Low risk |
-| `presentation/overlay/OverlayService.kt` | 0 | 7 | ⚠️ `lateinit` overuse in Service — late-init fields should be `var?` with null checks or refactored with lazy delegation |
+## Files 300-500 Lines (Monitor)
 
-**Overall null-safety is excellent.** Only 3 `!!` usages across the entire codebase.
+| File | Lines | Notes |
+|------|-------|-------|
+| `SettingsScreen.kt` | 492 | Many setting sections; would benefit from section composable extraction |
+| `PermissionWizardScreen.kt` | 418 | Multi-step permission flow; reasonable for complexity |
+| `DraftReplayScreen.kt` | 335 | Replay visualization; acceptable |
+| `HeroDetailScreen.kt` | 312 | Detail view; acceptable |
+| `HomeScreen.kt` | 302 | Multiple cards/sections; acceptable |
+| `LogScreen.kt` | 301 | Log viewer with expand/collapse; acceptable |
+| `DraftScorer.kt` | 283 | Core scoring algorithm; algorithmic complexity justified |
+| `DraftExporter.kt` | 269 | Canvas rendering + CSV export; two responsibilities but manageable |
 
-## Dead Code Detection
+## Null Safety (Post-Cleanup)
 
-- No unused `object` singletons found.
-- `GetSuggestionsUseCase` — injects no repository; logic may be partially redundant with `DraftViewModel`. **Flag for review.**
-- `VoiceAlertService.kt` — no callers found via grep. **Likely dead code.** Needs confirmation before deletion.
+| Issue | Count | Status |
+|-------|-------|--------|
+| `!!` operators | **0** | All 3 instances eliminated in this overhaul |
+| `lateinit var` | 6 | All in OverlayService (Hilt injection) + test files; standard usage |
 
-## High Coupling (> 10 imports)
+## Compiler Warnings (Post-Cleanup)
 
-- `MiniWidget.kt` — ~60 imports (Compose + domain types). Expected for a large overlay composable. Splitting sub-components will reduce this naturally.
-- `SettingsScreen.kt` — ~70 imports. Same pattern; extraction will resolve.
+| Warning | Status |
+|---------|--------|
+| FlowPreview on `debounce()` | Fixed: `@OptIn(FlowPreview::class)` |
+| Deprecated `Icons.Rounded.ShowChart` | Fixed: `Icons.AutoMirrored.Rounded.ShowChart` |
+| Deprecated `LocalClipboardManager` | Suppressed: suspend-based `LocalClipboard` migration deferred |
+| Always-true condition in MiniWidget | Fixed: direct null/id check for smart cast |
 
 ## Domain Purity
 
-✅ **PASS** — No `android.*` imports found in `domain/` package Kotlin files.
+Domain layer (`domain/` package) was scanned for `android.*` imports:
+- **Result**: 0 violations in source code
+- Test files import `android.os.Parcel` and `android.os.Parcelable` for serialization tests (expected)
+- `GetPagedHeroesUseCase` imports `androidx.paging.PagingData` (framework-adjacent but accepted by Android architecture guidelines)
 
-Comments in `OverlayController.kt`, `SaveDraftSessionUseCase.kt`, `ToggleOverlayUseCase.kt` explicitly document this constraint. Architecture is clean.
+## Coupling Analysis
 
-## Threading / Coroutine Health
+| File | Import Count | Notes |
+|------|-------------|-------|
+| `OverlayService.kt` | 30+ | High coupling due to service orchestration role; expected for Android Service |
+| `DraftExporter.kt` | 15 | Medium; Canvas + MediaStore + Room entity |
+| `DraftViewModel.kt` | ~12 | Normal for ViewModel |
+| All others | <10 | Low coupling |
 
-| Pattern | Count | Assessment |
-|---|---|---|
-| `GlobalScope` | 0 | ✅ None |
-| `runBlocking` | 0 | ✅ None |
-| `viewModelScope` | Multiple ViewModels | ✅ Correct |
-| `lifecycleScope` | `OverlayService` | ✅ Correct for Service |
+## Bugs Fixed in This Overhaul
 
-## SimpleDateFormat (Thread Safety)
+| Bug | File | Severity | Description |
+|-----|------|----------|-------------|
+| Data loss on save | `DraftSessionRepositoryImpl.kt` | HIGH | `toEntity()` hardcoded `yourPickIds = emptyList()` instead of mapping the actual field. Pick data was silently discarded on database round-trips. |
 
-`DateFormatter.kt` uses `SimpleDateFormat` which is not thread-safe. Since minSdk = 29 (> 26), this can be replaced with `java.time.format.DateTimeFormatter` for correctness and performance.
+## Recommendations for Future Work
 
-## Architecture Pattern Health
-
-| Layer | Pattern | Status |
-|---|---|---|
-| UI | Jetpack Compose + `hiltViewModel()` | ✅ Modern |
-| State | `StateFlow` / `collectAsStateWithLifecycle` | ✅ Recommended |
-| ViewModels | `viewModelScope` + Hilt injection | ✅ Correct |
-| Data | Room + Retrofit + DataStore | ✅ Modern |
-| DI | Hilt 2.55 | ✅ Current |
-| Async | Coroutines/Flow throughout | ✅ Correct |
-
-No LiveData found — full StateFlow migration already complete.
-
-## Priority Refactor Targets
-
-1. **HIGH:** Split `MiniWidget.kt` (1202 lines) into sub-composable files
-2. **HIGH:** Split `SettingsScreen.kt` (1060 lines) into section composables
-3. **HIGH:** Extract coroutine/capture helpers from `OverlayService.kt` (991 lines)
-4. **MEDIUM:** Replace `SimpleDateFormat` with `java.time` in `DateFormatter.kt`
-5. **MEDIUM:** Audit `VoiceAlertService.kt` for dead code
-6. **LOW:** Extract notification channel ID constant from `OverlayService.kt`
-
+1. **OverlayService decomposition** (1,051 lines): Extract `CaptureLoopManager`, `SessionSnapshotManager`, and `TouchStrategyHandler` into separate classes to reduce cognitive complexity.
+2. **VoiceAlertService integration**: Wire TTS alert calls into OverlayService draft phase transitions.
+3. **MetaSnapshotDto.toEntity()**: `HeroDto` is missing `hasCCUlt` field mapping — defaults to `false` for all heroes fetched from network.
+4. **Pre-existing test failures**: 8 unit tests failing on `main` branch (BanRecommenderTest, CompositionAnalyzerTest, RankRuleEngineTest, DraftScorerTest) — likely test data drift.
