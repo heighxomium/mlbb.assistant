@@ -28,8 +28,9 @@ class MainActivity : ComponentActivity() {
     private val projectionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        if (result.resultCode == RESULT_OK && result.data != null) {
-            OverlayService.startWithProjection(this, result.resultCode, result.data!!)
+        val data = result.data
+        if (result.resultCode == RESULT_OK && data != null) {
+            OverlayService.startWithProjection(this, result.resultCode, data)
         }
     }
 

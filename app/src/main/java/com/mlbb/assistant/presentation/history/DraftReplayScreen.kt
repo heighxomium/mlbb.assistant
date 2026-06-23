@@ -130,7 +130,7 @@ fun DraftReplayScreen(
                 }
             }
             else -> {
-                val s = state.session!!
+                val s = state.session ?: return@Scaffold
                 LazyColumn(
                     contentPadding = PaddingValues(
                         top    = innerPadding.calculateTopPadding() + 8.dp,

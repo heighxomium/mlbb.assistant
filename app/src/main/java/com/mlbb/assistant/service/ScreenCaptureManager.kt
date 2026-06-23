@@ -43,15 +43,16 @@ class ScreenCaptureManager(private val context: Context) {
         val mpm = context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         mediaProjection = mpm.getMediaProjection(resultCode, data)
 
-        imageReader = ImageReader.newInstance(
+        val reader = ImageReader.newInstance(
             screenWidth, screenHeight, PixelFormat.RGBA_8888, 2
         )
+        imageReader = reader
 
         virtualDisplay = mediaProjection?.createVirtualDisplay(
             "MLBBCapture",
             screenWidth, screenHeight, screenDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader!!.surface,
+            reader.surface,
             null, null
         )
 
