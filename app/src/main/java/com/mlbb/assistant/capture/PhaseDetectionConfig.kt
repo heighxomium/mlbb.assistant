@@ -2,7 +2,7 @@ package com.mlbb.assistant.capture
 
 /**
  * Named constants for every magic number used in [PhaseDetector] and
- * [FrameProcessor].  Centralising them here satisfies TD-03 and TD-04 and
+ * [PortraitMatcher].  Centralising them here satisfies TD-03 and TD-04 and
  * makes threshold tuning discoverable without reading raw detector code.
  *
  * Colour thresholds were measured from MLBB 1.8 / 1.9 screenshot samples at
