@@ -27,7 +27,7 @@ hiltWork                     = "1.3.0"
 retrofit                     = "2.11.0"
 # Retrofit converter for kotlinx.serialization (replaces GsonConverterFactory)
 retrofitKotlinxConverter     = "1.0.0"
-okhttp                       = "4.12.0"
+okhttp                       = "5.4.0"
 gson                         = "2.14.0"
 
 # ── Async / Kotlin stdlib extensions ──────────────────────────────────────
