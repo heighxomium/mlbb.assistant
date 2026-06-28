@@ -14,7 +14,7 @@ composeBom                   = "2026.06.00"
 # ── Jetpack ───────────────────────────────────────────────────────────────
 room                         = "2.7.1"
 datastore                    = "1.2.1"
-navigationCompose            = "2.9.0"
+navigationCompose            = "2.9.8"
 paging                       = "3.5.0"
 workRuntime                  = "2.11.2"
 
