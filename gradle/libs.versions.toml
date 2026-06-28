@@ -38,12 +38,12 @@ kotlinxSerialization         = "1.7.3"
 coil                         = "3.1.0"
 
 # ── UI enhancement ────────────────────────────────────────────────────────
-shimmer                      = "1.3.0"
+shimmer                      = "1.4.0"
 composeCharts                = "0.2.5"
 lottie                       = "6.7.1"
 # skydoves/Balloon: Compose tooltip for hero suggestion long-press (rec. §8.4, RA-06)
 # JitPack: com.github.skydoves:balloon:1.6.12
-balloon                      = "1.6.12"
+balloon                      = "1.7.6"
 
 # ── ML / CV ───────────────────────────────────────────────────────────────
 mlkitTextRec                 = "16.0.1"
