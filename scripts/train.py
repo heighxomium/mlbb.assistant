@@ -1,491 +1,306 @@
 #!/usr/bin/env python3
 """
-MLBB Hero Portrait TFLite Training Pipeline (Enhanced)
-=======================================================
-Downloads CDN portraits, generates synthetic ban/pick slot variants,
-applies realistic screen-capture artifacts, and trains MobileNetV3Small.
-
-Key enhancement: Synthetic data generation to simulate:
-- Ban slot: red prohibition overlay + darkening
-- Pick slot: country flag + rank badge + spell icon overlays
-- Screen capture: JPEG compression, brightness shifts, slight blur, noise
+MLBB Unified Training Pipeline (Focused)
+========================================
+1. Downloads CDN hero portraits.
+2. Generates YOLO dataset focused ONLY on detecting heroes in:
+   - Banned slots (Top)
+   - Ally pick slots (Left)
+   - Enemy pick slots (Right)
+3. Trains YOLOv8-Nano and exports to TFLite.
+4. Generates MobileNet dataset and trains Hero Classifier.
 """
 
+# ==============================================================================
+# CRITICAL CI/CD FIXES: Prevent thread oversubscription and CUDA segfaults
+# Must be set BEFORE importing torch, tensorflow, or ultralytics
+# ==============================================================================
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"       # Hide GPUs to prevent CUDA stub segfaults
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
 import io
 import json
 import random
+import yaml
 import requests
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 from pathlib import Path
 from tqdm import tqdm
+
 import tensorflow as tf
 from tensorflow import keras
 from tensorflow.keras import layers, applications
 from tensorflow.keras.optimizers import Adam
 from sklearn.model_selection import train_test_split
+from ultralytics import YOLO
 
-# Configuration
 CONFIG = {
     'json_path': 'app/src/main/res/raw/default_heroes.json',
     'output_dir': 'app/src/main/assets',
     'portraits_dir': 'app/src/main/assets/portraits',
+    'yolo_temp_dir': 'scripts/temp',
     
-    # Image dimensions
-    'size_main': 224,  # MobileNetV3Small input
-    'size_pick': 128,  # TD-18
-    'size_ban': 64,    # TD-18
+    'size_main': 224,
+    'epochs_mobilenet': 30,
+    'batch_size_mobilenet': 8,
+    'lr_mobilenet': 0.0005,
+    'augmentation_factor': 20,
     
-    # Training hyperparameters
-    'epochs': 60,
-    'batch_size': 16,
-    'learning_rate': 0.0005,
+    'num_yolo_images': 2000,
+    'epochs_yolo': 50,
+    'imgsz_yolo': 416,
     
-    # Synthetic data generation
-    'augmentation_factor': 20,  # Total augmented samples per hero
-    'ban_variant_ratio': 0.3,   # 30% of training data simulates ban slots
-    'pick_variant_ratio': 0.3,  # 30% simulates pick slots
-    'clean_ratio': 0.4,         # 40% clean CDN portraits
-    
-    # Screen capture simulation
-    'jpeg_quality_range': (70, 95),
-    'brightness_shift_range': (-0.15, 0.15),
-    'contrast_shift_range': (-0.1, 0.1),
-    'blur_probability': 0.3,
-    'noise_probability': 0.2,
-    
-    # TFLite outputs
-    'tflite_model_path': 'mlbb_hero_classifier.tflite',
-    'labels_file_path': 'hero_classifier_labels.txt',
+    'mobilenet_tflite': 'mlbb_hero_classifier.tflite',
+    'mobilenet_labels': 'hero_classifier_labels.txt',
+    'yolo_tflite': 'mlbb_ui_detector.tflite',
 }
 
 def load_heroes():
-    """Load and clean hero data from default_heroes.json"""
-    print(f"[1/6] Loading hero data from {CONFIG['json_path']}...")
-    
+    print(f"\n[1/6] Loading hero data...")
     with open(CONFIG['json_path'], 'r', encoding='utf-8') as f:
         raw_data = json.load(f)
-    
-    cleaned_data = []
-    for item in raw_data:
-        cleaned_item = {
-            k.strip(): v.strip() if isinstance(v, str) else v 
-            for k, v in item.items()
-        }
-        cleaned_data.append(cleaned_item)
-    
-    print(f"✓ Loaded {len(cleaned_data)} heroes")
-    return cleaned_data
+    return [{k.strip(): v.strip() if isinstance(v, str) else v for k, v in item.items()} for item in raw_data]
 
 def download_portraits(heroes):
-    """Download official CDN portraits"""
     print(f"\n[2/6] Downloading portraits from CDN...")
-    
     portraits_dir = Path(CONFIG['portraits_dir'])
     main_dir = portraits_dir / 'main'
-    pick_dir = portraits_dir / 'pick'
-    ban_dir = portraits_dir / 'ban'
+    main_dir.mkdir(parents=True, exist_ok=True)
     
-    for d in [main_dir, pick_dir, ban_dir]:
-        d.mkdir(parents=True, exist_ok=True)
-    
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}
+    headers = {'User-Agent': 'Mozilla/5.0'}
     valid_heroes = []
     
     for hero in tqdm(heroes, desc="Downloading"):
-        hero_id = hero.get('id')
-        hero_name = hero.get('name')
-        image_url = hero.get('imageUrl')
-        
-        if not hero_id or not image_url:
-            continue
+        hero_id, hero_name, image_url = hero.get('id'), hero.get('name'), hero.get('imageUrl')
+        if not hero_id or not image_url: continue
         
         try:
             main_path = main_dir / f"{hero_id}.png"
             if not main_path.exists():
                 response = requests.get(image_url, headers=headers, timeout=10)
                 response.raise_for_status()
-                img_bytes = io.BytesIO(response.content)
-                img = Image.open(img_bytes).convert('RGB')
-            else:
-                img = Image.open(main_path).convert('RGB')
-            
-            # Generate variants
-            main_img = img.resize((CONFIG['size_main'], CONFIG['size_main']), Image.LANCZOS)
-            main_img.save(main_path)
-            
-            pick_img = main_img.resize((CONFIG['size_pick'], CONFIG['size_pick']), Image.LANCZOS)
-            pick_img.save(pick_dir / f"{hero_id}.png")
-            
-            ban_img = main_img.resize((CONFIG['size_ban'], CONFIG['size_ban']), Image.LANCZOS)
-            ban_img.save(ban_dir / f"{hero_id}.png")
-            
+                img = Image.open(io.BytesIO(response.content)).convert('RGB')
+                img.save(main_path)
             valid_heroes.append({'id': hero_id, 'name': hero_name})
-            
         except Exception as e:
-            print(f"\n✗ Failed to process {hero_name} (ID {hero_id}): {e}")
-            continue
-    
-    print(f"✓ Prepared {len(valid_heroes)} heroes with variants")
+            print(f"\n✗ Failed {hero_name}: {e}")
+            
+    print(f"✓ Prepared {len(valid_heroes)} heroes")
     return valid_heroes
 
-def create_ban_overlay(img):
-    """Create a synthetic ban slot variant with red prohibition overlay"""
-    img = img.copy()
-    draw = ImageDraw.Draw(img)
-    
-    # Darken the image (ban slots appear darker)
-    enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(0.7)
-    
-    # Add red prohibition circle overlay (bottom-right)
-    size = img.size[0]
-    overlay_size = int(size * 0.35)
-    overlay_x = size - overlay_size - int(size * 0.05)
-    overlay_y = size - overlay_size - int(size * 0.05)
-    
-    # Draw red circle
-    draw.ellipse(
-        [overlay_x, overlay_y, overlay_x + overlay_size, overlay_y + overlay_size],
-        fill=(220, 50, 50, 200),
-        outline=(180, 30, 30, 255),
-        width=3
-    )
-    
-    # Draw diagonal line (prohibition symbol)
-    draw.line(
-        [overlay_x + int(overlay_size * 0.2), overlay_y + int(overlay_size * 0.8),
-         overlay_x + int(overlay_size * 0.8), overlay_y + int(overlay_size * 0.2)],
-        fill=(255, 255, 255, 255),
-        width=4
-    )
-    
-    return img
-
-def create_pick_slot_overlay(img):
-    """Create a synthetic pick slot variant with UI chrome overlays"""
-    img = img.copy()
-    draw = ImageDraw.Draw(img)
-    
-    size = img.size[0]
-    
-    # Add country flag (top-left) - simplified as colored rectangle
-    flag_size = int(size * 0.25)
-    flag_x = int(size * 0.05)
-    flag_y = int(size * 0.05)
-    
-    # Random flag colors (simulating different countries)
-    flag_colors = [
-        [(255, 0, 0), (255, 255, 255), (0, 0, 255)],  # Red/White/Blue
-        [(255, 215, 0), (255, 0, 0)],  # Gold/Red
-        [(0, 128, 0), (255, 255, 255), (255, 0, 0)],  # Green/White/Red
-    ]
-    colors = random.choice(flag_colors)
-    
-    for i, color in enumerate(colors):
-        stripe_height = flag_size // len(colors)
-        draw.rectangle(
-            [flag_x, flag_y + i * stripe_height, flag_x + flag_size, flag_y + (i + 1) * stripe_height],
-            fill=color
-        )
-    
-    # Add rank badge (top-right) - circular badge
-    badge_size = int(size * 0.2)
-    badge_x = size - badge_size - int(size * 0.05)
-    badge_y = int(size * 0.05)
-    
-    # Gold badge
-    draw.ellipse(
-        [badge_x, badge_y, badge_x + badge_size, badge_y + badge_size],
-        fill=(255, 215, 0),
-        outline=(200, 170, 0),
-        width=2
-    )
-    
-    # Add spell icon (top-right, below badge)
-    spell_size = int(size * 0.18)
-    spell_x = size - spell_size - int(size * 0.05)
-    spell_y = badge_y + badge_size + int(size * 0.05)
-    
-    # Orange spell icon
-    draw.ellipse(
-        [spell_x, spell_y, spell_x + spell_size, spell_y + spell_size],
-        fill=(255, 140, 0),
-        outline=(200, 110, 0),
-        width=2
-    )
-    
-    return img
-
 def apply_screen_capture_artifacts(img):
-    """Simulate screen capture degradation"""
     img = img.copy()
-    
-    # JPEG compression artifacts
-    quality = random.randint(*CONFIG['jpeg_quality_range'])
+    quality = random.randint(70, 95)
     buffer = io.BytesIO()
     img.save(buffer, format='JPEG', quality=quality)
     buffer.seek(0)
     img = Image.open(buffer).convert('RGB')
     
-    # Brightness shift
-    brightness_shift = random.uniform(*CONFIG['brightness_shift_range'])
-    enhancer = ImageEnhance.Brightness(img)
-    img = enhancer.enhance(1.0 + brightness_shift)
+    img = ImageEnhance.Brightness(img).enhance(1.0 + random.uniform(-0.15, 0.15))
+    img = ImageEnhance.Contrast(img).enhance(1.0 + random.uniform(-0.1, 0.1))
     
-    # Contrast shift
-    contrast_shift = random.uniform(*CONFIG['contrast_shift_range'])
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(1.0 + contrast_shift)
-    
-    # Occasional blur
-    if random.random() < CONFIG['blur_probability']:
+    if random.random() < 0.3:
         img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.5, 1.5)))
-    
-    # Occasional noise
-    if random.random() < CONFIG['noise_probability']:
-        img_array = np.array(img)
-        noise = np.random.normal(0, 10, img_array.shape).astype(np.uint8)
-        img_array = np.clip(img_array.astype(np.int16) + noise, 0, 255).astype(np.uint8)
-        img = Image.fromarray(img_array)
-    
+    if random.random() < 0.2:
+        arr = np.array(img)
+        noise = np.random.normal(0, 10, arr.shape).astype(np.uint8)
+        img = Image.fromarray(np.clip(arr.astype(np.int16) + noise, 0, 255).astype(np.uint8))
     return img
 
-def prepare_dataset(valid_heroes):
-    """Load images and generate synthetic variants"""
-    print(f"\n[3/6] Preparing dataset with synthetic variants...")
+def generate_and_train_yolo(valid_heroes):
+    print(f"\n[3/6] Generating Focused YOLO Dataset & Training...")
     
+    yolo_dir = Path(CONFIG['yolo_temp_dir'])
+    img_dir, lbl_dir = yolo_dir / 'images', yolo_dir / 'labels'
+    img_dir.mkdir(parents=True, exist_ok=True)
+    lbl_dir.mkdir(parents=True, exist_ok=True)
+    
+    # ONLY the 3 classes we care about
+    CLASSES = ['banned_hero', 'ally_hero', 'enemy_hero']
+    main_dir = Path(CONFIG['portraits_dir']) / 'main'
+    
+    # Load a subset of hero portraits to paste
+    hero_imgs = [Image.open(main_dir / f"{h['id']}.png").convert('RGB') for h in valid_heroes[:20]]
+    
+    # Coordinates for 1280x720 canvas (cx, cy, w, h)
+    BAN_SLOTS = [(540, 50, 45, 45), (595, 50, 45, 45), (640, 50, 45, 45), (685, 50, 45, 45), (740, 50, 45, 45)]
+    ALLY_SLOTS = [(80, 150, 90, 90), (80, 270, 90, 90), (80, 390, 90, 90), (80, 510, 90, 90), (80, 630, 90, 90)]
+    ENEMY_SLOTS = [(1200, 150, 90, 90), (1200, 270, 90, 90), (1200, 390, 90, 90), (1200, 510, 90, 90), (1200, 630, 90, 90)]
+
+    for i in tqdm(range(CONFIG['num_yolo_images']), desc="YOLO Data"):
+        # Dark draft background
+        bg = (random.randint(10, 30), random.randint(10, 30), random.randint(20, 40))
+        img = Image.new('RGB', (1280, 720), color=bg)
+        labels = []
+        
+        # Helper to process a list of slots for a specific class
+        def process_slots(slots, class_name):
+            for cx, cy, w, h in slots:
+                # Randomly decide if this slot is active (has a hero) in this frame
+                if random.random() > 0.4: 
+                    jx = random.randint(-8, 8)
+                    jy = random.randint(-8, 8)
+                    final_cx, final_cy = cx + jx, cy + jy
+                    
+                    if hero_imgs:
+                        hero_img = random.choice(hero_imgs).resize((w, h), Image.LANCZOS)
+                        hero_img = apply_screen_capture_artifacts(hero_img)
+                        img.paste(hero_img, (final_cx - w//2, final_cy - h//2))
+                    
+                    class_id = CLASSES.index(class_name)
+                    labels.append(f"{class_id} {final_cx/1280:.4f} {final_cy/720:.4f} {w/1280:.4f} {h/720:.4f}")
+
+        process_slots(BAN_SLOTS, 'banned_hero')
+        process_slots(ALLY_SLOTS, 'ally_hero')
+        process_slots(ENEMY_SLOTS, 'enemy_hero')
+                
+        img.save(img_dir / f"syn_{i:04d}.jpg")
+        with open(lbl_dir / f"syn_{i:04d}.txt", 'w') as f:
+            f.write('\n'.join(labels))
+
+    dataset_yaml = yolo_dir / 'dataset.yaml'
+    with open(dataset_yaml, 'w') as f:
+        yaml.dump({'path': str(yolo_dir.absolute()), 'train': 'images', 'val': 'images', 'nc': len(CLASSES), 'names': CLASSES}, f)
+
+    print("Training YOLOv8-Nano (Focused)...")
+    yolo_model = YOLO('yolov8n.pt')
+    
+    yolo_model.train(
+        data=str(dataset_yaml),
+        epochs=CONFIG['epochs_yolo'],
+        imgsz=CONFIG['imgsz_yolo'],
+        batch=4,
+        workers=0,
+        device='cpu',
+        project=str(yolo_dir),
+        name='yolo_train',
+        exist_ok=True,
+        verbose=False
+    )
+    
+    # FIX 1: Get the exact path to the best weights directly from the trainer object.
+    best_pt = yolo_model.trainer.best
+    print(f"✓ Training complete. Best model located at: {best_pt}")
+    
+    # Load the best model and export to TFLite
+    yolo_model = YOLO(str(best_pt))
+    
+    # FIX 2: The export() method actually RETURNS the exact path to the generated file!
+    # This completely eliminates guessing where Ultralytics puts the .tflite file.
+    exported_file = yolo_model.export(format='tflite', int8=True)
+    generated_tflite = Path(exported_file)
+    print(f"✓ Export complete. TFLite located at: {generated_tflite}")
+    
+    final_yolo_path = Path(CONFIG['output_dir']) / CONFIG['yolo_tflite']
+    
+    # Ensure the final output directory exists before moving the file
+    final_yolo_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    generated_tflite.rename(final_yolo_path)
+    print(f"✓ YOLO TFLite successfully moved to {final_yolo_path}")
+
+def create_ban_overlay(img):
+    img = img.copy()
+    draw = ImageDraw.Draw(img)
+    img = ImageEnhance.Brightness(img).enhance(0.7)
+    size = img.size[0]
+    o_size = int(size * 0.35)
+    o_x, o_y = size - o_size - int(size * 0.05), size - o_size - int(size * 0.05)
+    draw.ellipse([o_x, o_y, o_x + o_size, o_y + o_size], fill=(220, 50, 50, 200), outline=(180, 30, 30, 255), width=3)
+    draw.line([o_x + int(o_size*0.2), o_y + int(o_size*0.8), o_x + int(o_size*0.8), o_y + int(o_size*0.2)], fill=(255,255,255,255), width=4)
+    return img
+
+def create_pick_overlay(img):
+    img = img.copy()
+    draw = ImageDraw.Draw(img)
+    size = img.size[0]
+    f_size, f_x, f_y = int(size * 0.25), int(size * 0.05), int(size * 0.05)
+    colors = random.choice([[(255,0,0),(255,255,255),(0,0,255)], [(255,215,0),(255,0,0)]])
+    for i, c in enumerate(colors):
+        sh = f_size // len(colors)
+        draw.rectangle([f_x, f_y + i*sh, f_x + f_size, f_y + (i+1)*sh], fill=c)
+    b_size, b_x, b_y = int(size * 0.2), size - int(size * 0.2) - int(size * 0.05), int(size * 0.05)
+    draw.ellipse([b_x, b_y, b_x + b_size, b_y + b_size], fill=(255, 215, 0), outline=(200, 170, 0), width=2)
+    return img
+
+def train_mobilenet(valid_heroes):
+    print(f"\n[4/6] Preparing MobileNet Dataset...")
     valid_heroes.sort(key=lambda x: x['id'])
     labels = [h['name'] for h in valid_heroes]
-    
     main_dir = Path(CONFIG['portraits_dir']) / 'main'
-    images = []
-    targets = []
     
-    print("Generating synthetic training data...")
-    for idx, hero in enumerate(tqdm(valid_heroes)):
-        img_path = main_dir / f"{hero['id']}.png"
-        img = Image.open(img_path).convert('RGB')
-        img = img.resize((CONFIG['size_main'], CONFIG['size_main']), Image.LANCZOS)
-        
-        # Determine variant distribution
+    images, targets = [], []
+    for idx, hero in enumerate(tqdm(valid_heroes, desc="MobileNet Data")):
+        img = Image.open(main_dir / f"{hero['id']}.png").convert('RGB').resize((CONFIG['size_main'], CONFIG['size_main']), Image.LANCZOS)
         num_samples = CONFIG['augmentation_factor']
-        num_clean = int(num_samples * CONFIG['clean_ratio'])
-        num_ban = int(num_samples * CONFIG['ban_variant_ratio'])
-        num_pick = num_samples - num_clean - num_ban
         
-        # Clean variants with screen capture artifacts
-        for _ in range(num_clean):
-            augmented = apply_screen_capture_artifacts(img)
-            images.append(np.array(augmented))
-            targets.append(idx)
-        
-        # Ban slot variants
-        for _ in range(num_ban):
-            ban_variant = create_ban_overlay(img)
-            augmented = apply_screen_capture_artifacts(ban_variant)
-            images.append(np.array(augmented))
-            targets.append(idx)
-        
-        # Pick slot variants
-        for _ in range(num_pick):
-            pick_variant = create_pick_slot_overlay(img)
-            augmented = apply_screen_capture_artifacts(pick_variant)
-            images.append(np.array(augmented))
-            targets.append(idx)
-    
-    X = np.array(images, dtype=np.float32)
-    y = np.array(targets, dtype=np.int32)
-    
-    # Normalize to [-1, 1]
-    X = (X / 127.5) - 1.0
-    
-    # Shuffle and split
-    p = np.random.permutation(len(X))
-    X, y = X[p], y[p]
-    
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.1, random_state=42
-    )
-    
-    print(f"✓ Dataset ready: {len(X_train)} train, {len(X_val)} val samples")
-    print(f"  Distribution: {CONFIG['clean_ratio']*100:.0f}% clean, {CONFIG['ban_variant_ratio']*100:.0f}% ban, {CONFIG['pick_variant_ratio']*100:.0f}% pick")
-    print(f"  Sample shape: {X_train[0].shape}")
-    
-    return (X_train, y_train), (X_val, y_val), labels
+        for _ in range(int(num_samples * 0.4)):
+            images.append(np.array(apply_screen_capture_artifacts(img))); targets.append(idx)
+        for _ in range(int(num_samples * 0.3)):
+            images.append(np.array(apply_screen_capture_artifacts(create_ban_overlay(img)))); targets.append(idx)
+        for _ in range(int(num_samples * 0.3)):
+            images.append(np.array(apply_screen_capture_artifacts(create_pick_overlay(img)))); targets.append(idx)
 
-def build_model(num_classes):
-    """Build MobileNetV3Small model"""
-    input_shape = (CONFIG['size_main'], CONFIG['size_main'], 3)
-    
-    base_model = applications.MobileNetV3Small(
-        input_shape=input_shape,
-        include_top=False,
-        weights='imagenet'
-    )
+    X = (np.array(images, dtype=np.float32) / 127.5) - 1.0
+    y = np.array(targets, dtype=np.int32)
+    p = np.random.permutation(len(X))
+    X_train, X_val, y_train, y_val = train_test_split(X[p], y[p], test_size=0.1, random_state=42)
+
+    print(f"\n[5/6] Training MobileNetV3Small...")
+    base_model = applications.MobileNetV3Small(input_shape=(CONFIG['size_main'], CONFIG['size_main'], 3), include_top=False, weights='imagenet')
     base_model.trainable = False
     
     model = keras.Sequential([
-        base_model,
-        layers.GlobalAveragePooling2D(),
-        layers.BatchNormalization(),
-        layers.Dense(256, activation='relu'),
-        layers.Dropout(0.5),
-        layers.Dense(num_classes, activation='softmax')
+        base_model, layers.GlobalAveragePooling2D(), layers.BatchNormalization(),
+        layers.Dense(256, activation='relu'), layers.Dropout(0.5), layers.Dense(len(labels), activation='softmax')
     ])
     
-    return model
-
-def train_model(train_data, val_data, labels):
-    """Train the model in two phases"""
-    print(f"\n[4/6] Training MobileNetV3Small...")
+    model.compile(optimizer=Adam(learning_rate=CONFIG['lr_mobilenet']), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=CONFIG['epochs_mobilenet']//2, batch_size=CONFIG['batch_size_mobilenet'], verbose=1)
     
-    X_train, y_train = train_data
-    X_val, y_val = val_data
-    num_classes = len(labels)
-    
-    model = build_model(num_classes)
-    
-    # Phase 1: Train top layers
-    model.compile(
-        optimizer=Adam(learning_rate=CONFIG['learning_rate']),
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    
-    print("\nPhase 1: Training top layers...")
-    model.fit(
-        X_train, y_train,
-        validation_data=(X_val, y_val),
-        epochs=CONFIG['epochs'] // 2,
-        batch_size=CONFIG['batch_size'],
-        verbose=1
-    )
-    
-    # Phase 2: Fine-tune last 10 layers
-    base_model = model.layers[0]
     base_model.trainable = True
-    for layer in base_model.layers[:-10]:
-        layer.trainable = False
-    
-    model.compile(
-        optimizer=Adam(learning_rate=CONFIG['learning_rate'] / 10),
-        loss='sparse_categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    
-    print("\nPhase 2: Fine-tuning base model...")
-    model.fit(
-        X_train, y_train,
-        validation_data=(X_val, y_val),
-        epochs=CONFIG['epochs'] // 2,
-        batch_size=CONFIG['batch_size'],
-        verbose=1
-    )
-    
-    return model
+    for layer in base_model.layers[:-10]: layer.trainable = False
+    model.compile(optimizer=Adam(learning_rate=CONFIG['lr_mobilenet']/10), loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    model.fit(X_train, y_train, validation_data=(X_val, y_val), epochs=CONFIG['epochs_mobilenet']//2, batch_size=CONFIG['batch_size_mobilenet'], verbose=1)
 
-def convert_to_tflite(model, labels):
-    """Convert to float16 TFLite"""
-    print(f"\n[5/6] Converting to TFLite (float16)...")
-    
+    print(f"\n[6/6] Exporting MobileNet to TFLite...")
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.target_spec.supported_types = [tf.float16]
     
     tflite_model = converter.convert()
+    out_path = Path(CONFIG['output_dir']) / CONFIG['mobilenet_tflite']
+    with open(out_path, 'wb') as f: f.write(tflite_model)
+    print(f"✓ MobileNet TFLite saved to {out_path}")
     
-    tflite_path = Path(CONFIG['output_dir']) / CONFIG['tflite_model_path']
-    with open(tflite_path, 'wb') as f:
-        f.write(tflite_model)
-    print(f"✓ Model saved to {tflite_path} ({len(tflite_model) / 1024 / 1024:.2f} MB)")
-    
-    labels_path = Path(CONFIG['output_dir']) / CONFIG['labels_file_path']
+    labels_path = Path(CONFIG['output_dir']) / CONFIG['mobilenet_labels']
     with open(labels_path, 'w', encoding='utf-8') as f:
-        f.write("# MLBB Hero Classifier Labels\n")
-        f.write(f"# Total classes: {len(labels)}\n")
-        f.write("# Line index n maps to output neuron n (sorted by hero ID)\n")
-        for label in labels:
-            f.write(f"{label}\n")
+        f.write("\n".join(labels))
     print(f"✓ Labels saved to {labels_path}")
-    
-    return tflite_model
-
-def generate_sample_previews(valid_heroes):
-    """Generate preview images showing the synthetic variants"""
-    print(f"\n[6/6] Generating sample previews...")
-    
-    previews_dir = Path(CONFIG['portraits_dir']) / 'previews'
-    previews_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Pick first 3 heroes for preview
-    preview_heroes = valid_heroes[:3]
-    
-    main_dir = Path(CONFIG['portraits_dir']) / 'main'
-    
-    for hero in preview_heroes:
-        img_path = main_dir / f"{hero['id']}.png"
-        img = Image.open(img_path).convert('RGB')
-        img = img.resize((CONFIG['size_main'], CONFIG['size_main']), Image.LANCZOS)
-        
-        # Create variants
-        clean = apply_screen_capture_artifacts(img)
-        ban = create_ban_overlay(img)
-        ban_augmented = apply_screen_capture_artifacts(ban)
-        pick = create_pick_slot_overlay(img)
-        pick_augmented = apply_screen_capture_artifacts(pick)
-        
-        # Save previews
-        hero_name = hero['name'].replace(' ', '_')
-        clean.save(previews_dir / f"{hero_name}_clean.png")
-        ban_augmented.save(previews_dir / f"{hero_name}_ban.png")
-        pick_augmented.save(previews_dir / f"{hero_name}_pick.png")
-    
-    print(f"✓ Previews saved to {previews_dir}")
 
 def main():
     print("=" * 60)
-    print("MLBB Hero Portrait TFLite Training Pipeline (Enhanced)")
+    print("MLBB FOCUSED TRAINING PIPELINE")
     print("=" * 60)
     
-    # Step 1: Load heroes
     heroes = load_heroes()
-    if not heroes:
-        print("ERROR: No valid heroes loaded")
-        return 1
+    if not heroes: return 1
     
-    # Step 2: Download portraits
     valid_heroes = download_portraits(heroes)
-    if not valid_heroes:
-        print("ERROR: No valid heroes processed")
-        return 1
+    if not valid_heroes: return 1
     
-    # Step 3: Prepare dataset with synthetic variants
-    train_data, val_data, labels = prepare_dataset(valid_heroes)
-    
-    # Step 4: Train model
-    model = train_model(train_data, val_data, labels)
-    
-    # Step 5: Convert to TFLite
-    convert_to_tflite(model, labels)
-    
-    # Step 6: Generate previews
-    generate_sample_previews(valid_heroes)
+    generate_and_train_yolo(valid_heroes)
+    train_mobilenet(valid_heroes)
     
     print("\n" + "=" * 60)
-    print("✅ PIPELINE COMPLETE")
+    print("✅ ALL MODELS TRAINED AND EXPORTED SUCCESSFULLY")
     print("=" * 60)
-    print("\nKey improvements:")
-    print("• 30% ban slot variants (red prohibition overlay + darkening)")
-    print("• 30% pick slot variants (country flag + rank badge + spell icon)")
-    print("• Realistic screen capture artifacts (JPEG, brightness, blur, noise)")
-    print("• Model trained to recognize heroes DESPITE overlays")
-    print("\nNext steps:")
-    print("1. Check previews in app/src/main/assets/portraits/previews/")
-    print("2. Ensure `androidResources { noCompress += listOf(\"tflite\") }` in build.gradle.kts")
-    print("3. Rebuild Android project")
-    
     return 0
 
 if __name__ == '__main__':
